@@ -1,0 +1,148 @@
+package pb233978;
+
+import battlecode.common.*;
+import static battlecode.common.GameConstants.*;
+import java.util.Random;
+import java.util.ArrayList;
+import java.util.HashMap;
+
+public class BaseRobot {
+	public int archonID;                // ID zwierzchniego archona
+	public MapLocation archonLoc;       // LOC zwierzchniego archona
+	public final RobotController rc;    // Kontroler
+	public Random rand;                 // lotto...
+	public int lastMsg;                 // ostatnio wyslany MSG (mozna tylko 1 na runde)
+	public String[] debugLines;         // Dla wyswietlania debugow...
+
+	public BaseRobot(RobotController c) 
+	{
+		archonID = -1;
+		archonLoc = null;
+		rc = c;
+		rand = new Random();
+		rand.setSeed(rc.getRobot().getID());
+		lastMsg = 0;
+		debugLines = new String[GameConstants.NUMBER_OF_INDICATOR_STRINGS];
+	}
+	
+	public void run()
+	{}
+
+	public void waitForReady()
+	{
+		while (rc.isMovementActive()) rc.yield();
+	}
+
+	public void waitForAttack()
+	{
+		while (rc.isAttackActive()) rc.yield();
+	}
+
+	// Jeden krok ku 'dest'.
+	public void stepTo(MapLocation dest)
+	{
+		int repeat = 5;
+
+		while (repeat > 0) {
+			//debug("Probuje wykonac ruch... repeat="+repeat);
+			try {
+				if (rc.getLocation() == dest) return;
+
+				Direction d = rc.getLocation().directionTo(dest);
+
+				if (Direction.OMNI == d || Direction.NONE == d) return;
+
+				if (rc.canMove(d)) {
+					if (rc.getDirection() != d) {
+						waitForReady();
+						rc.setDirection(d);
+						rc.yield();
+					}
+
+					waitForReady();
+					rc.moveForward();
+					rc.yield();
+				} else {
+					for (int rot = 0; rot < 8; ++rot) {
+						d = d.rotateRight();
+						if (rc.canMove(d)) break;
+					}
+
+					if (rc.getDirection() != d) {
+						waitForReady();
+						rc.setDirection(d);
+						rc.yield();
+					}
+
+					waitForReady();
+					rc.moveForward();
+					rc.yield();
+				}
+
+				return;
+			}
+			catch (Exception e) { /* bo costam */ }	
+			--repeat;
+		}
+	}
+
+	// Jeden krok w kierunku 'd'
+	public void stepTo(Direction d)
+	{
+		if (Direction.OMNI == d || Direction.NONE == d) return;
+
+		boolean repeat = true;
+
+		while (repeat) {
+			try {
+				while (!rc.canMove(d)) d = d.rotateRight();
+				
+				if (rc.getDirection() != d) {
+					waitForReady();
+					rc.setDirection(d);
+					rc.yield();
+				}
+					
+				waitForReady();
+				rc.moveForward();
+				rc.yield();
+
+				repeat = false;
+			}
+			catch (Exception e) { /* bo costam */ }
+		}
+	}
+
+	// Idziemy az do skutku
+	public void goTo(MapLocation dest)
+	{
+		while (rc.getLocation() != dest) stepTo(dest);
+	}
+
+	// Idziemy az do okolicy 'dest'
+	public void goToNearby(MapLocation dest)
+	{
+		while (!rc.getLocation().isAdjacentTo(dest)) stepTo(dest);
+	}
+
+	// Sprawdzenie czy jest niski poziom energii
+	public boolean isEnergonLow() 
+	{
+		return (2*rc.getEnergonLevel() < rc.getMaxEnergonLevel());
+	}
+
+	public void debug(String descr)
+	{
+		for (int i = 1; i < debugLines.length; ++i)
+			debugLines[i-1] = debugLines[i];
+
+		debugLines[debugLines.length-1] = Clock.getRoundNum() + ": " + descr;
+		
+		for (int i = 0; i < debugLines.length; ++i)
+			rc.setIndicatorString(i, debugLines[i]);
+
+		//System.out.println(rc.getRobotType() + " : " + descr);
+	}
+	
+}
+

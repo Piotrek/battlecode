@@ -1,0 +1,430 @@
+package pb233978;
+
+import java.util.Arrays;
+import java.util.ArrayList;
+import battlecode.common.*;
+import static battlecode.common.GameConstants.*;
+
+public class ArchonRobot extends BaseRobot {
+	public enum Mode { LOOKING, USING, ATTACK, DEFENCE, ESCAPE };
+	public Mode mode;
+	public int stop;
+	
+	public ArchonRobot(RobotController c) 
+	{
+		super(c);
+		mode = Mode.LOOKING;
+		stop = 0;
+	}
+
+	public void run()
+	{
+		while (true) {
+			switch (mode) {
+				case LOOKING:
+					goToFluxDeposit();
+					break;
+				case USING:
+					useFluxDeposit();
+					break;
+				case ATTACK:
+					attack();
+					break;
+				case DEFENCE:
+					defence();
+					break;
+				case ESCAPE:
+					escape();
+					break;
+			};
+		}
+	}
+
+	public void goToFluxDeposit()
+	{
+		Direction d = rc.senseDirectionToUnownedFluxDeposit();
+		if (d == Direction.NONE) 
+			d = rc.senseDirectionToOwnedFluxDeposit();
+			
+		if (d == Direction.OMNI) { 
+			try { if (rc.senseFluxDepositAtLocation(rc.getLocation()) != null) mode = Mode.USING; }
+			catch (Exception e) { System.out.println("Dlaczego 'OMNI' to kierunek do Fluxa?"); }
+		} else if (d == Direction.NONE) { /* Nie moge dojsc do Fluxa? - postoje... */ } 
+		else stepTo(d);
+
+		manageNearbyRobots(0, 0, 1, 2, 0);
+	}
+
+	public void useFluxDeposit()
+	{
+		manageNearbyRobots(1,2,0,0,0);
+
+		FluxDepositInfo flux;
+		try {
+		flux = rc.senseFluxDepositInfo(rc.senseFluxDepositAtLocation(rc.getLocation()));
+		if (flux.roundsAvailableAtCurrentHeight == 0)
+			stop++;
+		else stop = 0;
+		if (stop > 200) mode = Mode.LOOKING;
+		} catch (Exception e) {}
+			
+	}
+
+	public void attack()
+	{
+		manageNearbyRobots(0, 0, 2, 5, 0);
+	}
+
+	public void defence()
+	{
+		manageNearbyRobots(0, 3, 2, 0, 0);
+	}
+
+	public void escape()
+	{
+		try { 
+				waitForReady();
+				rc.setDirection(rc.getDirection().opposite());
+			} 
+			catch (Exception e) { }
+
+		for (int i = 1; i < 40; i++) {
+		try {
+			waitForReady();
+			if(rc.canMove(rc.getDirection())) {
+                 rc.moveForward();
+            }
+            else {
+                 rc.setDirection(rc.getDirection().rotateRight());
+            }
+            rc.yield();
+			} catch (Exception e) { }
+		}
+		manageNearbyRobots(0,0,0,0,0);
+	}
+
+	public void manageNearbyRobots(
+			int workers_needed, 
+			int channelers_needed,
+			int cannons_needed,
+			int soldiers_needed,
+			int scouts_needed)
+	{
+		// Liczba Archonow w poblizu...
+		int archons = 1;
+
+		// Msg jaki bedziemy wysylac...
+		Message msg = new Message();
+		ArrayList<Integer> msg_i = new ArrayList<Integer>();
+		ArrayList<String> msg_s = new ArrayList<String>();
+		ArrayList<MapLocation> msg_l = new ArrayList<MapLocation>();
+
+		// Info o Archonie wysylamy zawsze...
+		msg_s.add((Mode.USING == mode) ? "Using" : "Looking");
+		msg_i.add(rc.getRobot().getID());
+		msg_l.add(rc.getLocation());
+
+		// Timestamp
+		msg_s.add("Tstamp");
+		msg_i.add(Clock.getRoundNum());
+		msg_l.add(rc.getLocation());
+
+		// Listy wrogich jednostek w poblizu
+		ArrayList<Robot> ground_enemy = new ArrayList<Robot>();
+		ArrayList<Robot> air_enemy = new ArrayList<Robot>();
+
+		// Listy wlasnych jednostek w poblizu
+		ArrayList<Robot> myWorkers = new ArrayList<Robot>();
+		ArrayList<Robot> mySoldiers = new ArrayList<Robot>();
+		ArrayList<Robot> myCannons = new ArrayList<Robot>();
+		ArrayList<Robot> myChannelers = new ArrayList<Robot>();
+		ArrayList<Robot> myScouts = new ArrayList<Robot>();
+		ArrayList<Robot> myArchon = new ArrayList<Robot>();
+		int enemySoldier = 0;
+		int enemyCannon = 0;
+
+		// Sprwadzamy co jest na ziemi w poblizu
+		Robot[] ground = rc.senseNearbyGroundRobots();
+
+		for (Robot r : ground) {
+			try {
+				RobotInfo inf = rc.senseRobotInfo(r);
+				if (inf.team != rc.getTeam()) { 
+					ground_enemy.add(r); 
+					if (inf.type == RobotType.CANNON) { enemyCannon++;}
+					if (inf.type == RobotType.SOLDIER) { enemySoldier++;}
+					continue; }
+
+				if (inf.type == RobotType.WORKER) { myWorkers.add(r); }
+				if (inf.type == RobotType.CHANNELER) { myChannelers.add(r); }
+				if (inf.type == RobotType.CANNON) { myCannons.add(r);}
+				if (inf.type == RobotType.SOLDIER) { mySoldiers.add(r);}
+
+				if (!inf.location.isAdjacentTo(rc.getLocation()) && rc.getLocation() != inf.location) continue;
+				if (inf.energonLevel > 0.9*inf.maxEnergon || rc.getEnergonLevel() <= 35) continue;
+
+				if (mode == Mode.USING)
+					if (((inf.type == RobotType.WORKER) && (myWorkers.size() <= 2 * workers_needed)) || 
+						((inf.type == RobotType.SOLDIER) && (mySoldiers.size() <= soldiers_needed)) ||
+						((inf.type == RobotType.CANNON) && (myCannons.size() <= cannons_needed)) ||
+						((inf.type == RobotType.CHANNELER) && (myChannelers.size() <= channelers_needed))) {
+						rc.transferEnergon(
+							Math.min((inf.maxEnergon - inf.energonLevel)/2, 10), inf.location, r.getRobotLevel());
+						rc.yield();
+					}
+				if (mode == Mode.ESCAPE)
+					continue;
+				if (mode == Mode.ATTACK || mode == Mode.DEFENCE) {
+					if (inf.type != RobotType.WORKER) {
+						rc.transferEnergon(
+							Math.min((inf.maxEnergon - inf.energonLevel), 10), inf.location, r.getRobotLevel());
+						rc.yield();
+					}
+				}
+				
+
+			}
+			catch (Exception e) { }
+		}
+
+		if (enemyCannon > enemySoldier) {
+			channelers_needed--;
+			soldiers_needed++;
+		}
+
+		// Sprawdzimy co jest w powietrzu w poblizu
+		Robot[] air = rc.senseNearbyAirRobots();
+		
+		for (Robot r : air) {
+			try {
+				RobotInfo inf = rc.senseRobotInfo(r);
+				if (inf.team != rc.getTeam()) { air_enemy.add(r); continue; }
+
+				if (inf.type == RobotType.ARCHON) { myArchon.add(r); ++archons; continue; }
+				if (inf.type == RobotType.SCOUT) { myScouts.add(r);}
+
+				if (!inf.location.isAdjacentTo(rc.getLocation())) continue;
+				if (inf.energonLevel > 0.7*inf.maxEnergon || rc.getEnergonLevel() <= 35) continue;
+
+				rc.transferEnergon(
+						Math.min(inf.maxEnergon - inf.energonLevel, 5),
+						inf.location, r.getRobotLevel());
+				rc.yield();
+			}
+			catch (Exception e) { }
+		}
+
+		// Ustawiamy zmienna mowiaca czy jest bitwa
+		if (!ground_enemy.isEmpty() || !air_enemy.isEmpty()) { 
+			if (Mode.DEFENCE != mode && Mode.ATTACK != mode) 
+				mode = (Mode.USING == mode) ? Mode.DEFENCE : Mode.ATTACK;
+		} else {
+			if (Mode.DEFENCE == mode) mode = Mode.USING;
+			if (Mode.ATTACK == mode) mode = Mode.LOOKING;
+		}
+
+		if (Mode.ESCAPE == mode) {
+			if (rc.getEnergonLevel() / rc.getMaxEnergonLevel() > 0.8)
+				mode = (ground_enemy.size() > 0) ? Mode.ATTACK : Mode.LOOKING;
+		} else if (ground_enemy.size() > 0 && rc.getEnergonLevel() / rc.getMaxEnergonLevel() < 0.3) 
+			mode = Mode.ESCAPE;
+
+		// Spawnujemy jesli brakuje jakies jednostki (bierzemy pod uwage obecnosc innych Archonow...
+
+		if (Mode.USING == mode) {
+			if (archons > 2) {
+			  if (1 + workers_needed > myWorkers.size())  
+				  { spawnRobot(RobotType.WORKER   ); }
+			} else {
+			  if (archons - 1 + workers_needed > myWorkers.size())    { spawnRobot(RobotType.WORKER   ); }
+			}
+			if (archons * channelers_needed > myChannelers.size()) { spawnRobot(RobotType.CHANNELER); }
+			if (archons * cannons_needed > myCannons.size())    { spawnRobot(RobotType.CANNON   ); }
+			if (archons * soldiers_needed > mySoldiers.size())   { spawnRobot(RobotType.SOLDIER  ); }
+			if (archons * scouts_needed > myScouts.size())     { spawnRobot(RobotType.SCOUT    ); }
+		}
+		
+		if (Mode.ATTACK == mode) {
+			if (archons * cannons_needed > myCannons.size())    { spawnRobot(RobotType.CANNON   ); }
+			if (archons * soldiers_needed > mySoldiers.size())   { spawnRobot(RobotType.SOLDIER  ); }
+			if (archons * workers_needed > myWorkers.size())    { spawnRobot(RobotType.WORKER   ); }
+			if (archons * channelers_needed > myChannelers.size()) { spawnRobot(RobotType.CHANNELER); }
+			if (archons * scouts_needed > myScouts.size())     { spawnRobot(RobotType.SCOUT    ); }
+		}
+
+		if (Mode.DEFENCE == mode) {
+			if (archons * channelers_needed > myChannelers.size()) { spawnRobot(RobotType.CHANNELER); }
+			if (archons * cannons_needed > myCannons.size())    { spawnRobot(RobotType.CANNON   ); }
+			if (archons * soldiers_needed > mySoldiers.size())   { spawnRobot(RobotType.SOLDIER  ); }
+			if (archons * workers_needed > myWorkers.size())    { spawnRobot(RobotType.WORKER   ); }
+			if (archons * scouts_needed > myScouts.size())     { spawnRobot(RobotType.SCOUT    ); }
+		}
+		
+
+		// Teraz koordynujemy atak.
+
+		if (!ground_enemy.isEmpty()) {
+			try {
+//					RobotInfo best = null;
+//					int min = 100, bestid = 0;
+
+				for (Robot r : ground_enemy) {
+					RobotInfo inf = rc.senseRobotInfo(r);
+					if (inf.type == RobotType.CHANNELER) {
+						msg_s.add("GEnemy");
+						msg_i.add(r.getID());
+						msg_l.add(inf.location);
+					}
+//						int len = inf.location.distanceSquaredTo(rc.getLocation());
+//						if (min > len) { min = len; best = inf; bestid = r.getID(); }
+				}
+			  
+				for (Robot r : ground_enemy) {
+					RobotInfo inf = rc.senseRobotInfo(r);
+					msg_s.add("GEnemy");
+					msg_i.add(r.getID());
+					msg_l.add(inf.location);
+//						int len = inf.location.distanceSquaredTo(rc.getLocation());
+//						if (min > len) { min = len; best = inf; bestid = r.getID(); }
+				}
+					
+					// Wysylamy pozycje wroga najblizszego archonowi
+					
+					/*if (null != best) {
+						msg_s.add("GEnemy");
+						msg_i.add(bestid);
+						msg_l.add(best.location);
+					}*/
+			}
+			catch (Exception e) { }
+		}
+
+		if (!air_enemy.isEmpty()) {
+			try {
+//					RobotInfo best = null;
+//					int min = 100, bestid = 0;
+
+				for (Robot r : air_enemy) {
+					RobotInfo inf = rc.senseRobotInfo(r);
+					msg_s.add("AEnemy");
+					msg_i.add(r.getID());
+					msg_l.add(inf.location);
+
+//						int len = inf.location.distanceSquaredTo(rc.getLocation());
+//						if (min > len) { min = len; best = inf; bestid = r.getID(); }
+					}
+				
+					// Wysylamy pozycje wroga najblizszego archonowi
+					
+					/*if (null != best) {
+						msg_s.add("AEnemy");
+						msg_i.add(bestid);
+						msg_l.add(best.location);
+					}*/
+			}
+			catch (Exception e) { }
+		}
+
+		// Jak mamy flux to puszczamy info o blokach
+
+		if (Mode.USING == mode) {
+			MapLocation[] locs = rc.senseNearbyBlocks();
+			ArrayList<MapLocation> ls = new ArrayList<MapLocation>();
+			MapLocation best = null;
+			int max = -1;
+
+			for (MapLocation l : locs) {
+				if (rc.getLocation() == l) continue;
+				if (l.isAdjacentTo(rc.getLocation())) {
+					continue;
+					/* try { 
+						int len = rc.senseNumBlocksAtLocation(l);
+						if (len > max && null == rc.senseGroundRobotAtLocation(l)) {
+							max = len; best = l;
+						}
+					}
+					catch (Exception e) { } */
+				} else {
+					msg_s.add("Blocks");
+					msg_l.add(l);
+					msg_i.add(0); // nie mam pomyslu co tu dac...
+				}
+			}
+		
+		}
+
+		// Oceniamy czy jest co wyslac... :P
+
+		if (msg_s.size() > 1 || lastMsg + 3 < Clock.getRoundNum()) {
+			try {
+				// Zamotane to jakies... :/
+				msg.strings = new String[msg_s.size()];
+				msg.locations = new MapLocation[msg_l.size()];
+				msg.ints = new int[msg_i.size()];
+				
+				for (int i = 0; i < msg_s.size(); ++i) {
+					msg.strings[i] = msg_s.get(i);
+					msg.locations[i] = msg_l.get(i);
+					msg.ints[i] = msg_i.get(i);
+				}
+
+				try { 
+					rc.broadcast(msg); 
+					rc.yield();
+					lastMsg = Clock.getRoundNum(); 
+				}
+				catch (Exception e) { debug("~MSG : " + e.toString()); }
+
+				if (Mode.ATTACK == mode) debug("Mode = ATTACK, Bcast: " + msg.getNumBytes() + "B, " + msg.ints.length + "El");
+				else if (Mode.DEFENCE == mode) debug("Mode = DEFENCE, Bcast: " + msg.getNumBytes() + "B, " + msg.ints.length + "El");
+				else if (Mode.ESCAPE == mode) debug("Mode = ESCAPE, Bcast: " + msg.getNumBytes() + "B, " + msg.ints.length + "El");
+				else if (Mode.USING == mode) debug("Mode = USING, Bcast: " + msg.getNumBytes() + "B, " + msg.ints.length + "El");
+				else if (Mode.LOOKING == mode) debug("Mode = LOOKING, Bcast: " + msg.getNumBytes() + "B, " + msg.ints.length + "El");
+				debug("Potrzeba: W=" + workers_needed + " S=" + soldiers_needed);
+			}
+			catch (Exception e) { }
+		}
+	}
+
+	public void spawnRobot(RobotType t)
+	{
+		if (rc.getEnergonLevel() < 60) return;
+
+		try {
+			Direction d = rc.getDirection();
+			int dir_num = 0;
+			
+			// Archon jest w powietrzu a spawnuje na ziemi
+			if (t == RobotType.SCOUT)
+				while (!rc.canMove(d) && dir_num < 8) {
+					d = d.rotateRight();
+					dir_num++;
+				}
+			else
+				while (true) {
+					if (rc.senseTerrainTile(rc.getLocation().add(d)).getType() == TerrainTile.TerrainType.LAND &&
+							rc.senseGroundRobotAtLocation(rc.getLocation().add(d)) == null) break;
+					if (dir_num == 8) break;
+					d = d.rotateRight();
+					dir_num++;
+				} 
+
+			if (rc.getDirection() != d) {
+				waitForReady();
+				rc.setDirection(d);
+				rc.yield();
+			}
+
+			waitForReady();
+			rc.spawn(t);
+			rc.yield();
+
+		}
+		catch (GameActionException e) {
+			debug("Nie udalo sie wyprodukowac: " + t.toString());
+			debug("Wyjatek: " + e.toString());
+		}
+	}
+
+}
+
