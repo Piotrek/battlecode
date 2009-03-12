@@ -1,4 +1,4 @@
-package Sente;
+package pb233978;
 
 import battlecode.common.*;
 import static battlecode.common.GameConstants.*;

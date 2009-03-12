@@ -33,6 +33,7 @@ public class CannonRobot extends BaseRobot {
 			if (msgs.length > 0) { // Wybieramy najblizszego Archona
 				int min1 = 100, min2 = 100, i1 = 0, i2 = 0;
 				for (int i = 0; i < msgs.length; ++i) {
+					if (msgs[i].strings == null) continue;
 					if ("Looking" != msgs[i].strings[0] && "Using" != msgs[i].strings[0]) continue;
 					if (Clock.getRoundNum() > msgs[i].ints[1] + 1) continue;
 					boolean attack = false;
