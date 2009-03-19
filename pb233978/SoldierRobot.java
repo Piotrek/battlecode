@@ -35,6 +35,8 @@ public class SoldierRobot extends BaseRobot {
 			if (msgs.length > 0) { // Wybieramy najblizszego Archona
 				int max1 = -1, max2 = -1, i1 = 0, i2 = 0;
 				for (int i = 0; i < msgs.length; ++i) {
+					if (msgs[i].strings == null) continue;
+					if (msgs[i].strings[0] == "Stop") { enemyLoc = null; continue; }
 					if ("Looking" != msgs[i].strings[0] && "Using" != msgs[i].strings[0]) continue;
 					if (Clock.getRoundNum() > msgs[i].ints[1] + 1) continue;
 					boolean attack = false;
@@ -66,8 +68,10 @@ public class SoldierRobot extends BaseRobot {
 			ArrayList<MapLocation> gs = new ArrayList<MapLocation>();
 
 			for (int i = 1; i < msg.strings.length; ++i) {
-				if ("AEnemy" == msg.strings[i]) as.add(msg.locations[i]);
-				if ("GEnemy" == msg.strings[i]) gs.add(msg.locations[i]);
+				if ("AEnemy" == msg.strings[i]) 
+						if ((msg.locations[i].getX() + msg.locations[i].getY()) % 100 == msg.ints[i]) as.add(msg.locations[i]);
+				if ("GEnemy" == msg.strings[i]) 
+						if ((msg.locations[i].getX() + msg.locations[i].getY()) % 100 == msg.ints[i]) gs.add(msg.locations[i]);
 			}
 
 			int min = 100;

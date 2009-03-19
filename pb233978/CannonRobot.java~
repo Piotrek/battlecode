@@ -21,18 +21,18 @@ public class CannonRobot extends BaseRobot {
 	{
 		int lastGet = Clock.getRoundNum();
 
+		waitForAttack();
 		while (true) {
-			//dummyWork();
-
-			//if (lastGet + 2 < Clock.getRoundNum()) rc.clearBroadcast();
 
 			Message[] msgs = rc.getAllMessages();
 			lastGet = Clock.getRoundNum();
 			Message msg = null;
 
-			if (msgs.length > 0) { // Wybieramy najblizszego Archona
+			if(msgs != null) 
+			   if (msgs.length > 0) { // Wybieramy najblizszego Archona
 				int min1 = 100, min2 = 100, i1 = 0, i2 = 0;
 				for (int i = 0; i < msgs.length; ++i) {
+					if (msgs[i].strings == null) continue;
 					if ("Looking" != msgs[i].strings[0] && "Using" != msgs[i].strings[0]) continue;
 					if (Clock.getRoundNum() > msgs[i].ints[1] + 1) continue;
 					boolean attack = false;
@@ -70,10 +70,11 @@ public class CannonRobot extends BaseRobot {
 			ArrayList<MapLocation> gs = new ArrayList<MapLocation>();
 
 			for (int i = 1; i < msg.strings.length; ++i) {
-				if ("AEnemy" == msg.strings[i]) as.add(msg.locations[i]);
-				if ("GEnemy" == msg.strings[i]) gs.add(msg.locations[i]);
+				if ("AEnemy" == msg.strings[i]) 
+						if ((msg.locations[i].getX() + msg.locations[i].getY()) % 100 == msg.ints[i]) as.add(msg.locations[i]);
+				if ("GEnemy" == msg.strings[i]) 
+						if ((msg.locations[i].getX() + msg.locations[i].getY()) % 100 == msg.ints[i]) gs.add(msg.locations[i]);
 			}
-			
 			// Teraz sprawdzimy czy w cos mozemy trafic...
 			
 			if (as.isEmpty() && gs.isEmpty()) { repeat = 0; continue; }
@@ -83,9 +84,9 @@ public class CannonRobot extends BaseRobot {
 			for (MapLocation l : gs) {
 				if (rc.canAttackSquare(l)) {
 					try {
-						waitForAttack();
 						rc.attackGround(l);
 						rc.yield();
+						waitForAttack();
 						enemyLoc = l;	
 						air = false;
 						ok = true;
@@ -100,9 +101,9 @@ public class CannonRobot extends BaseRobot {
 			for (MapLocation l : as) {
 				if (rc.canAttackSquare(l)) {
 					try {
-						waitForAttack();
 						rc.attackAir(l);
 						rc.yield();
+						waitForAttack();
 						enemyLoc = l;
 						ok = true;
 						air = true;
@@ -135,9 +136,9 @@ public class CannonRobot extends BaseRobot {
 						rc.yield();
 						if (rc.canAttackSquare(l)) {
 							try {
-								waitForAttack();
 								rc.attackGround(l);
 								rc.yield();
+								waitForAttack();
 								ok = true;
 								break;
 							} 
@@ -167,9 +168,9 @@ public class CannonRobot extends BaseRobot {
 						rc.yield();
 						if (rc.canAttackSquare(l)) {
 							try {
-								waitForAttack();
 								rc.attackGround(l);
 								rc.yield();
+								waitForAttack();
 								ok = true;
 								break;
 							} 
@@ -218,13 +219,14 @@ public class CannonRobot extends BaseRobot {
 
 	public void dummyWork()
 	{
+
 		if (enemyLoc != null) {
 			if (rc.canAttackSquare(enemyLoc)) {
 			try { 
-				waitForAttack();
 				if (air) rc.attackAir(enemyLoc);
 				else rc.attackGround(enemyLoc);
 				rc.yield();
+				waitForAttack();
 			}
 			catch (Exception e) { }
 			}
@@ -238,7 +240,6 @@ public class CannonRobot extends BaseRobot {
 		if (null != archonLoc) 
 			if (archonLoc.distanceSquaredTo(rc.getLocation()) >= 2)
 				stepTo(archonLoc);
-
 		// +
 		//if (rc.getLocation() != archonLoc) stepTo(archonLoc);
 	}

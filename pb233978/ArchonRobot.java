@@ -9,12 +9,14 @@ public class ArchonRobot extends BaseRobot {
 	public enum Mode { LOOKING, USING, ATTACK, DEFENCE, ESCAPE };
 	public Mode mode;
 	public int stop;
+	public int zmiana;
 	
 	public ArchonRobot(RobotController c) 
 	{
 		super(c);
 		mode = Mode.LOOKING;
 		stop = 0;
+		zmiana = 0;
 	}
 
 	public void run()
@@ -47,7 +49,12 @@ public class ArchonRobot extends BaseRobot {
 			d = rc.senseDirectionToOwnedFluxDeposit();
 			
 		if (d == Direction.OMNI) { 
-			try { if (rc.senseFluxDepositAtLocation(rc.getLocation()) != null) mode = Mode.USING; }
+			try { 
+				if (rc.senseFluxDepositAtLocation(rc.getLocation()) != null) {
+					mode = Mode.USING;
+					zmiana = 1;
+					}
+			}
 			catch (Exception e) { System.out.println("Dlaczego 'OMNI' to kierunek do Fluxa?"); }
 		} else if (d == Direction.NONE) { /* Nie moge dojsc do Fluxa? - postoje... */ } 
 		else stepTo(d);
@@ -118,6 +125,14 @@ public class ArchonRobot extends BaseRobot {
 		ArrayList<Integer> msg_i = new ArrayList<Integer>();
 		ArrayList<String> msg_s = new ArrayList<String>();
 		ArrayList<MapLocation> msg_l = new ArrayList<MapLocation>();
+
+		//Wysyłamy zeby nie strzelali w nas
+		if (zmiana == 1) {
+			zmiana = 0;
+			msg_s.add("Stop");
+			msg_i.add(0);
+			msg_l.add(rc.getLocation());
+		}
 
 		// Info o Archonie wysylamy zawsze...
 		msg_s.add((Mode.USING == mode) ? "Using" : "Looking");
@@ -272,7 +287,7 @@ public class ArchonRobot extends BaseRobot {
 					RobotInfo inf = rc.senseRobotInfo(r);
 					if (inf.type == RobotType.CHANNELER) {
 						msg_s.add("GEnemy");
-						msg_i.add(r.getID());
+						msg_i.add((inf.location.getX()+inf.location.getY()) % 100);
 						msg_l.add(inf.location);
 					}
 //						int len = inf.location.distanceSquaredTo(rc.getLocation());
@@ -282,7 +297,7 @@ public class ArchonRobot extends BaseRobot {
 				for (Robot r : ground_enemy) {
 					RobotInfo inf = rc.senseRobotInfo(r);
 					msg_s.add("GEnemy");
-					msg_i.add(r.getID());
+					msg_i.add((inf.location.getX()+inf.location.getY()) % 100);
 					msg_l.add(inf.location);
 //						int len = inf.location.distanceSquaredTo(rc.getLocation());
 //						if (min > len) { min = len; best = inf; bestid = r.getID(); }
@@ -307,7 +322,7 @@ public class ArchonRobot extends BaseRobot {
 				for (Robot r : air_enemy) {
 					RobotInfo inf = rc.senseRobotInfo(r);
 					msg_s.add("AEnemy");
-					msg_i.add(r.getID());
+					msg_i.add((inf.location.getX()+inf.location.getY()) % 100);
 					msg_l.add(inf.location);
 
 //						int len = inf.location.distanceSquaredTo(rc.getLocation());
